@@ -2,6 +2,15 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import date
+# Logo no topo (centralizada)
+st.markdown(
+    """
+    <div style="text-align: center; margin-bottom: 25px;">
+        <img src="https://raw.githubusercontent.com/GeorgeMaia2025/controle-maquinas-dashboard/main/LOGOTIPO_SERRACAL_SEM_SLOGAN-removebg-preview.png" width="180">
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ------------------------
 # CONFIGURAÇÃO DA PÁGINA
@@ -242,3 +251,4 @@ st.caption(
     "Dashboard somente leitura. Os dados vêm dos arquivos 'lancamentos.csv' e "
     "'diesel.csv', atualizados pelo sistema interno."
 )
+
