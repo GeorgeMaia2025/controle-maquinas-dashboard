@@ -2,36 +2,43 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import date
-# Logo no topo (centralizada)
-st.markdown(
-    """
-    <div style="text-align: center; margin-bottom: 25px;">
-        <img src="https://raw.githubusercontent.com/GeorgeMaia2025/controle-maquinas-dashboard/main/LOGOTIPO_SERRACAL_SEM_SLOGAN-removebg-preview.png" width="180">
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+import altair as alt
 
-# ------------------------
+# ---------------------------------
 # CONFIGURAÇÃO DA PÁGINA
-# ------------------------
+# ---------------------------------
 st.set_page_config(
-    page_title="Dashboard – Controle de Máquinas",
-    layout="centered",
+    page_title="Serracal - Gestão de Operações",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("Dashboard – Desempenho e Custos das Máquinas")
+# ---------------------------------
+# LOGO E CABEÇALHO SERRACAL
+# ---------------------------------
+LOGO_URL = "https://raw.githubusercontent.com/GeorgeMaia2025/controle-maquinas-dashboard/main/LOGOTIPO_SERRACAL_SEM_SLOGAN-removebg-preview.png"
 
-# ------------------------
+col_logo, col_title = st.columns([1, 3])
+with col_logo:
+    st.image(LOGO_URL, width=160)
+with col_title:
+    st.markdown(
+        "<h2 style='margin-bottom:0;'>SERRACAL CORRETIVOS AGRÍCOLAS</h2>"
+        "<h4 style='margin-top:4px; color:#5a5a5a;'>Dashboard de Desempenho e Custos de Máquinas</h4>",
+        unsafe_allow_html=True,
+    )
+
+st.markdown("---")
+
+# ---------------------------------
 # ARQUIVOS DOS DADOS
-# ------------------------
+# ---------------------------------
 ARQ_HORAS = "lancamentos.csv"
 ARQ_DIESEL = "diesel.csv"
 
-# ------------------------
+# ---------------------------------
 # CARREGAR DADOS (APENAS LEITURA)
-# ------------------------
+# ---------------------------------
 if os.path.exists(ARQ_HORAS):
     df_horas = pd.read_csv(ARQ_HORAS)
 else:
@@ -63,31 +70,29 @@ else:
 # Garantir tipos numéricos
 if not df_horas.empty:
     for col in ["Horímetro Inicial", "Horímetro Final", "Horas Trabalhadas"]:
-        df_horas[col] = pd.to_numeric(df_horas[col], errors="coerce").fillna(0)
+        df_horas[col] = pd.to_numeric(df_horas[col], errors="coerce").fillna(0.0)
 
 if not df_diesel.empty:
-    df_diesel["Litros"] = pd.to_numeric(df_diesel["Litros"], errors="coerce").fillna(0)
+    df_diesel["Litros"] = pd.to_numeric(df_diesel["Litros"], errors="coerce").fillna(0.0)
 
-# ------------------------
-# SIDEBAR – CONFIGURAÇÃO
-# ------------------------
-st.sidebar.title("Filtros e Configurações")
+# Se não houver dado nenhum, encerra
+if df_horas.empty and df_diesel.empty:
+    st.info("Ainda não há dados de horas ou diesel para exibir no dashboard.")
+    st.stop()
+
+# ---------------------------------
+# SIDEBAR – CONFIGURAÇÕES
+# ---------------------------------
+st.sidebar.markdown("### Parâmetros de Análise")
 
 custo_litro = st.sidebar.number_input(
     "Custo do diesel (R$/L)", min_value=0.0, value=6.00, step=0.10
 )
 st.sidebar.caption("Usado para calcular custo total e R$/hora.")
 
-# ------------------------
-# SE NÃO TIVER DADOS
-# ------------------------
-if df_horas.empty and df_diesel.empty:
-    st.info("Ainda não há dados de horas ou diesel para exibir no dashboard.")
-    st.stop()
-
-# ------------------------
+# ---------------------------------
 # PREPARAR DATAS PARA FILTRO
-# ------------------------
+# ---------------------------------
 dfh = df_horas.copy()
 dfd = df_diesel.copy()
 
@@ -110,13 +115,13 @@ else:
 
 st.subheader("Filtros")
 
-col_f1, col_f2 = st.columns(2)
+col_f1, col_f2, col_f3 = st.columns([1, 1, 2])
 with col_f1:
     data_ini = st.date_input("Data inicial", value=data_min)
 with col_f2:
     data_fim = st.date_input("Data final", value=data_max)
 
-# Lista de máquinas para filtro
+# Lista de máquinas
 maquinas_existentes = set()
 if not dfh.empty and "Máquina" in dfh.columns:
     maquinas_existentes.update(dfh["Máquina"].dropna().unique().tolist())
@@ -124,12 +129,13 @@ if not dfd.empty and "Máquina" in dfd.columns:
     maquinas_existentes.update(dfd["Máquina"].dropna().unique().tolist())
 maquinas_existentes = sorted(list(maquinas_existentes))
 
-maquina_filtro = st.selectbox(
-    "Filtrar por máquina",
-    ["Todas"] + maquinas_existentes if maquinas_existentes else ["Todas"],
-)
+with col_f3:
+    maquina_filtro = st.selectbox(
+        "Filtrar por máquina",
+        ["Todas"] + maquinas_existentes if maquinas_existentes else ["Todas"],
+    )
 
-# Aplicar filtros por data
+# Aplicar filtro de datas
 if not dfh.empty and "Data_dt" in dfh.columns:
     dfh = dfh[
         (dfh["Data_dt"] >= pd.to_datetime(data_ini))
@@ -150,9 +156,25 @@ if maquina_filtro != "Todas":
 
 st.markdown("---")
 
-# ------------------------
-# RESUMO POR MÁQUINA
-# ------------------------
+# ---------------------------------
+# KPIs GERAIS
+# ---------------------------------
+total_horas = dfh["Horas Trabalhadas"].sum() if not dfh.empty else 0.0
+total_litros = dfd["Litros"].sum() if not dfd.empty else 0.0
+lh_medio = total_litros / total_horas if total_horas > 0 else 0.0
+custo_total = total_litros * custo_litro
+
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Horas trabalhadas", f"{total_horas:.1f}")
+k2.metric("Litros consumidos", f"{total_litros:.0f}")
+k3.metric("L/H médio", f"{lh_medio:.2f}")
+k4.metric("Custo total (R$)", f"{custo_total:,.2f}")
+
+st.markdown("---")
+
+# ---------------------------------
+# RESUMO POR MÁQUINA + GRÁFICOS
+# ---------------------------------
 st.subheader("Resumo por Máquina (filtrado)")
 
 if not dfh.empty:
@@ -169,20 +191,20 @@ else:
 
 resumo_maquinas = pd.merge(
     horas_por_maquina, litros_por_maquina, on="Máquina", how="outer"
-).fillna(0)
+).fillna(0.0)
 
 if not resumo_maquinas.empty:
     resumo_maquinas["Litros por Hora (L/H)"] = resumo_maquinas.apply(
         lambda r: r["Litros"] / r["Horas Trabalhadas"]
         if r["Horas Trabalhadas"] > 0
-        else 0,
+        else 0.0,
         axis=1,
     )
     resumo_maquinas["Custo Total (R$)"] = resumo_maquinas["Litros"] * custo_litro
     resumo_maquinas["Custo por Hora (R$/h)"] = resumo_maquinas.apply(
         lambda r: r["Custo Total (R$)"] / r["Horas Trabalhadas"]
         if r["Horas Trabalhadas"] > 0
-        else 0,
+        else 0.0,
         axis=1,
     )
 
@@ -201,54 +223,58 @@ if not resumo_maquinas.empty:
     ].apply(classificar_consumo)
 
     st.dataframe(resumo_maquinas, use_container_width=True)
-else:
-    st.info("Nenhum dado dentro do período/filtros selecionados.")
 
-# ------------------------
+    st.markdown("### Gráficos por Máquina")
+
+    colg1, colg2 = st.columns(2)
+
+    with colg1:
+        chart_litros = (
+            alt.Chart(resumo_maquinas)
+            .mark_bar()
+            .encode(
+                x=alt.X("Máquina:N", sort="-y", title="Máquina"),
+                y=alt.Y("Litros:Q", title="Litros"),
+            )
+            .properties(height=300, title="Litros por Máquina")
+        )
+        st.altair_chart(chart_litros, use_container_width=True)
+
+    with colg2:
+        chart_custo_h = (
+            alt.Chart(resumo_maquinas)
+            .mark_bar()
+            .encode(
+                x=alt.X("Máquina:N", sort="-y", title="Máquina"),
+                y=alt.Y("Custo por Hora (R$/h):Q", title="R$/h"),
+            )
+            .properties(height=300, title="Custo por Hora por Máquina")
+        )
+        st.altair_chart(chart_custo_h, use_container_width=True)
+
+else:
+    st.info("Nenhum dado no período/filtro selecionado.")
+
+# ---------------------------------
 # CONSUMO POR OBRA / TALHÃO
-# ------------------------
+# ---------------------------------
 st.subheader("Consumo e Custo por Obra / Talhão (filtrado)")
 
 if not dfd.empty and "Local/Obra" in dfd.columns:
     por_obra = dfd.groupby("Local/Obra")[["Litros"]].sum().reset_index()
     por_obra["Custo Total (R$)"] = por_obra["Litros"] * custo_litro
     st.dataframe(por_obra, use_container_width=True)
-else:
-    st.info("Sem abastecimentos para o período/filtros selecionados.")
 
-# ------------------------
-# HORAS POR OPERADOR / LITROS POR ABASTECEDOR
-# ------------------------
-st.subheader("Horas por Operador e Litros por Abastecedor (filtrado)")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.markdown("**Horas por Operador**")
-    if not dfh.empty and "Operador" in dfh.columns:
-        por_operador = (
-            dfh.groupby("Operador")["Horas Trabalhadas"].sum().reset_index()
+    chart_obra = (
+        alt.Chart(por_obra)
+        .mark_bar()
+        .encode(
+            x=alt.X("Local/Obra:N", sort="-y", title="Local / Talhão"),
+            y=alt.Y("Litros:Q", title="Litros"),
         )
-        st.dataframe(por_operador, use_container_width=True)
-    else:
-        st.info("Sem lançamentos de horas no período/filtro.")
+        .properties(height=300, title="Litros por Obra / Talhão")
+    )
+    st.altair_chart(chart_obra, us
 
-with col2:
-    st.markdown("**Litros por Abastecedor**")
-    if not dfd.empty and "Abastecedor" in dfd.columns:
-        por_abastecedor = (
-            dfd.groupby("Abastecedor")["Litros"].sum().reset_index()
-        )
-        por_abastecedor["Custo Total (R$)"] = (
-            por_abastecedor["Litros"] * custo_litro
-        )
-        st.dataframe(por_abastecedor, use_container_width=True)
-    else:
-        st.info("Sem abastecimentos no período/filtro.")
 
-st.markdown("---")
-st.caption(
-    "Dashboard somente leitura. Os dados vêm dos arquivos 'lancamentos.csv' e "
-    "'diesel.csv', atualizados pelo sistema interno."
-)
 
