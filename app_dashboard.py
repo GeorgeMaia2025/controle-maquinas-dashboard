@@ -274,7 +274,13 @@ if not dfd.empty and "Local/Obra" in dfd.columns:
         )
         .properties(height=300, title="Litros por Obra / Talhão")
     )
-    st.altair_chart(chart_obra, us
+
+    st.altair_chart(chart_obra, use_container_width=True)
+
+else:
+    st.info("Sem abastecimentos para o período/filtro selecionados.")
+
+
 
 
 
